@@ -159,5 +159,6 @@ export default function AgentePage() {
         </div>
       </div>
     </div>
+    </div>
   )
 }
