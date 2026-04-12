@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase, type BotConfig } from '@/lib/supabase'
-import { Bot, Save, RefreshCw } from 'lucide-react'
+import { Bot, Save, RefreshCw, CreditCard, CheckCircle2, XCircle, Eye, EyeOff, ExternalLink } from 'lucide-react'
 
 const CONFIG_LABELS: Record<string, { label: string; desc: string; type: 'text' | 'textarea' | 'number' | 'time_range' }> = {
   business_name:          { label: 'Nombre del negocio',        desc: 'Nombre que usa el bot al presentarse',         type: 'text' },
@@ -29,6 +29,11 @@ export default function AgentePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<Record<string, boolean>>({})
   const [saved, setSaved] = useState<Record<string, boolean>>({})
+  const [mpToken, setMpToken] = useState('')
+  const [mpSaved, setMpSaved] = useState(false)
+  const [mpSaving, setMpSaving] = useState(false)
+  const [mpConnected, setMpConnected] = useState(false)
+  const [mpShowToken, setMpShowToken] = useState(false)
 
   useEffect(() => { load() }, [])
 
@@ -37,7 +42,7 @@ export default function AgentePage() {
     const { data } = await supabase.from('bot_config').select('*')
     const map: Record<string, BotConfig> = {}
     const vals: Record<string, string> = {}
-    ;(data || []).forEach((c: BotConfig) => { map[c.key] = c; vals[c.key] = c.value })
+        ;(data || []).forEach((c: BotConfig) => { map[c.key] = c; vals[c.key] = c.value; if (c.key === 'mercadopago_token' && c.value) { setMpToken(c.value); setMpConnected(true) } })
     setConfig(map); setValues(vals)
     setLoading(false)
   }
@@ -54,6 +59,26 @@ export default function AgentePage() {
     setSaved(s => ({ ...s, [key]: true }))
     setTimeout(() => setSaved(s => ({ ...s, [key]: false })), 2000)
     load()
+  }
+
+  async function saveMpToken() {
+  if (!mpToken.trim()) return
+  setMpSaving(true)
+  const existing = config['mercadopago_token']
+  if (existing) {
+  await supabase.from('bot_config').update({ value: mpToken.trim() }).eq('key', 'mercadopago_token')
+  } else {
+  await supabase.from('bot_config').insert({ key: 'mercadopago_token', value: mpToken.trim(), description: 'Access token de Mercado Pago' })
+  }
+  setMpSaving(false); setMpSaved(true); setMpConnected(true)
+  setTimeout(() => setMpSaved(false), 2500)
+  load()
+  }
+
+  async function disconnectMp() {
+  await supabase.from('bot_config').delete().eq('key', 'mercadopago_token')
+  setMpToken(''); setMpConnected(false)
+  load()
   }
 
   if (loading) return (
@@ -110,6 +135,28 @@ export default function AgentePage() {
             </div>
           </div>
         ))}
+        <div className="mt-8 bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+        <div className="flex items-center gap-3 mb-4">
+        <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center"><CreditCard className="w-5 h-5 text-blue-600" /></div>
+          <div>
+          <h2 className="text-base font-semibold text-gray-900">Mercado Pago</h2>
+          <p className="text-xs text-gray-500">Conectá tu cuenta para recibir pagos automáticos</p></div>
+          {mpConnected && (
+          <span className="ml-auto flex items-center gap-1 text-xs text-green-600 font-medium bg-green-50 px-2 py-1 rounded-full"><CheckCircle2 className="w-3.5 h-3.5" /> Conectado</span>
+          )}          
+        </div>
+        <div className="space-y-3">
+          <div className="relative">
+            <input type={mpShowToken ? 'text' : 'password'} className="w-full border border-gray-200 rounded-xl px-4 py-3 pr-20 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-300" placeholder="APP_USR-..." value={mpToken} onChange={e => setMpToken(e.target.value)} />
+            <button type="button" onClick={() => setMpShowToken(v => !v)} className="absolute right-10 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">{mpShowToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}</button>
+            <a href="https://www.mercadopago.com.ar/developers/panel/app" target="_blank" rel="noopener noreferrer" className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-500"><ExternalLink className="w-4 h-4" /></a>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={saveMpToken} disabled={mpSaving || !mpToken.trim()} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2.5 rounded-xl text-sm transition-colors disabled:opacity-60">{mpSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}{mpSaved ? '¡Guardado!' : mpSaving ? 'Guardando...' : 'Guardar token'}</button>
+            {mpConnected && (<button onClick={disconnectMp} className="flex items-center gap-2 text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 font-medium px-5 py-2.5 rounded-xl text-sm transition-colors"><XCircle className="w-4 h-4" /> Desconectar</button>)}
+          </div>
+          <p className="text-xs text-gray-400">Obtené tu Access Token desde el panel de desarrolladores de Mercado Pago. Usá el token de producción que empieza con APP_USR-</p>
+        </div>
       </div>
     </div>
   )
